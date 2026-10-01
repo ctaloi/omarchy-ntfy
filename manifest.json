@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "ntfy",
+  "name": "ntfy",
+  "version": "0.1.0",
+  "author": "Chris Taloi",
+  "license": "MIT",
+  "description": "Subscribe to ntfy topics: desktop notifications plus a bell with recent messages",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "ntfy",
+    "description": "Bell with unread count and recent ntfy messages",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
