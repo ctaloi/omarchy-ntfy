@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ntfy",
   "name": "ntfy",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Chris Aloi",
   "license": "MIT",
   "description": "Subscribe to ntfy topics: desktop notifications plus a bell with recent messages",

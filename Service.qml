@@ -6,7 +6,7 @@ import Quickshell.Io
 // (not per bar/monitor), turning each message into a desktop notification
 // and keeping a short history for the bar widget.
 //
-// Config:  ~/.config/omarchy/ntfy.json   { server, topics[], minPriority }
+// Config:  ~/.config/omarchy/ntfy.json   { server, topics[], minPriority, muted[] }
 // State:   ~/.local/state/omarchy/ntfy/state.json  { lastId, messages[] }
 Item {
   id: root
@@ -16,16 +16,29 @@ Item {
   readonly property string home: Quickshell.env("HOME")
   readonly property string configPath: home + "/.config/omarchy/ntfy.json"
   readonly property string stateDir: home + "/.local/state/omarchy/ntfy"
-  readonly property int maxMessages: 50
+  readonly property int maxMessages: 200
   readonly property int stallTimeoutMs: 120000
 
   property string server: "https://ntfy.sh"
   property var topics: []
   property int minPriority: 1
+  property var muted: []
   property bool configured: topics.length > 0
 
   property var messages: []
-  property int unreadCount: 0
+  readonly property int unreadCount: messages.filter(function(m) { return !m.read }).length
+  readonly property var unreadByTopic: {
+    var counts = {}
+    for (var i = 0; i < messages.length; i++)
+      if (!messages[i].read) counts[messages[i].topic] = (counts[messages[i].topic] || 0) + 1
+    return counts
+  }
+
+  // Bar panel view filter: "__all", "__unread", or a topic name.
+  property string viewFilter: "__all"
+
+  // Lets a keybinding (`omarchy-shell ntfy toggle`) open/close the bar panel.
+  signal toggleRequested()
   property string lastId: ""
   property bool connected: false
   property string status: "Not configured"
@@ -54,8 +67,13 @@ Item {
       status = "Invalid ntfy.json: " + e
       cfg = {}
     }
-    var nextTopics = Array.isArray(cfg.topics) ? cfg.topics.map(String).filter(function(t) { return t !== "" })
-      : (cfg.topic ? [String(cfg.topic)] : [])
+    var rawTopics = Array.isArray(cfg.topics) ? cfg.topics : (cfg.topic ? [cfg.topic] : [])
+    var nextTopics = []
+    for (var i = 0; i < rawTopics.length; i++) {
+      var t = String(rawTopics[i]).trim()
+      if (t !== "" && nextTopics.indexOf(t) === -1) nextTopics.push(t)
+    }
+    muted = Array.isArray(cfg.muted) ? cfg.muted.map(String) : []
     server = cfg.server ? String(cfg.server) : "https://ntfy.sh"
     minPriority = Number(cfg.minPriority) || 1
     topics = nextTopics
@@ -98,7 +116,7 @@ Item {
     if (evt.event === "open") {
       connected = true
       backoffMs = 1000
-      status = "Connected to " + topics.join(", ")
+      status = "Connected · " + topics.length + (topics.length === 1 ? " topic" : " topics")
       return
     }
     if (evt.event !== "message" || seen[evt.id]) return
@@ -129,8 +147,7 @@ Item {
     var next = [msg].concat(messages)
     if (next.length > maxMessages) next = next.slice(0, maxMessages)
     messages = next
-    unreadCount = unreadCount + 1
-    notify(msg)
+    if (muted.indexOf(msg.topic) === -1) notify(msg)
     saveState()
   }
 
@@ -140,16 +157,23 @@ Item {
     Quickshell.execDetached(["notify-send", "-a", "ntfy", "-u", urgency, title, msg.message])
   }
 
-  function markAllRead() {
-    if (unreadCount === 0) return
-    messages = messages.map(function(m) { var c = Object.assign({}, m); c.read = true; return c })
-    unreadCount = 0
+  // `topic` limits the change to one topic; empty means every topic.
+  function markRead(topic) {
+    var changed = false
+    var next = messages.map(function(m) {
+      if (m.read || (topic && m.topic !== topic)) return m
+      changed = true
+      var c = Object.assign({}, m); c.read = true; return c
+    })
+    if (!changed) return
+    messages = next
     saveState()
   }
 
-  function clearMessages() {
-    messages = []
-    unreadCount = 0
+  function markAllRead() { markRead("") }
+
+  function clearMessages(topic) {
+    messages = topic ? messages.filter(function(m) { return m.topic !== topic }) : []
     saveState()
   }
 
@@ -192,13 +216,10 @@ Item {
       lastId = s.lastId || ""
       messages = Array.isArray(s.messages) ? s.messages : []
       var ids = {}
-      var unread = 0
       for (var i = 0; i < messages.length; i++) {
         ids[messages[i].id] = true
-        if (!messages[i].read) unread++
       }
       seen = ids
-      unreadCount = unread
     } catch (e) {}
     stateLoaded = true
     reconnect(true)
@@ -239,13 +260,15 @@ Item {
     }
   }
 
-  // omarchy-shell ntfy send <topic> <message> | markRead | clear | status
+  // omarchy-shell ntfy send <topic> <message> | toggle | filter <topic|__unread|__all> | markRead | clear | status
   IpcHandler {
     target: "ntfy"
 
     function send(topic: string, message: string): void { root.publish(topic, message) }
+    function toggle(): void { root.toggleRequested() }
+    function filter(value: string): void { root.viewFilter = value || "__all" }
     function markRead(): void { root.markAllRead() }
-    function clear(): void { root.clearMessages() }
+    function clear(): void { root.clearMessages("") }
     function status(): string { return root.status + " (" + root.unreadCount + " unread)" }
   }
 

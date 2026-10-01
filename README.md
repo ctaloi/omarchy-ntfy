@@ -15,27 +15,43 @@ cp ntfy.example.json ~/.config/omarchy/ntfy.json   # then edit topics
 ## Config (`~/.config/omarchy/ntfy.json`)
 
 ```json
-{ "server": "https://ntfy.sh", "topics": ["my-topic"], "minPriority": 1 }
+{
+  "server": "https://ntfy.sh",
+  "topics": ["alerts", "ci", "homelab"],
+  "minPriority": 1,
+  "muted": ["ci"]
+}
 ```
 
 Changes apply on save. Messages below `minPriority` (1–5) are ignored.
+Topics in `muted` are still collected in the panel but never pop up a
+notification.
 
 ## Usage
 
-- Left-click the bell: show recent messages (marks them read when closed)
-- Right-click the bell: mark all read
+- Hover the bell: unread count and the busiest topics
+- Left-click the bell: open the panel; right-click: mark everything read
+- Filter the panel to All, Unread, or one topic (unread counts are shown in
+  the dropdown). Click a topic name under a message to jump to that topic.
+- Closing the panel marks what it showed as read: just that topic when
+  filtered to one, otherwise everything
 - Click a message that has a click URL to open it
-- Type in the box at the top of the popup and press Enter to send (pick the
-  topic from the dropdown when you subscribe to more than one)
+- Type in the box at the bottom and press Enter to send. When filtered to a
+  topic it sends there; otherwise pick the destination from the dropdown.
 
 From a terminal, script, or Hyprland keybinding:
 
 ```bash
 omarchy-shell ntfy send my-topic "Backup finished"
+omarchy-shell ntfy toggle            # open/close the panel on the focused monitor
+omarchy-shell ntfy filter alerts     # or __unread / __all
 omarchy-shell ntfy status
 omarchy-shell ntfy markRead
 omarchy-shell ntfy clear
 ```
+
+For example, in `~/.config/hypr/bindings.lua` you could bind a key to
+`omarchy-shell ntfy toggle`.
 
 Messages you send are added to the history as read, without notifying you.
 
