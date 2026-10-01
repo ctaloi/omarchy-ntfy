@@ -7,7 +7,7 @@ bar with an unread count and the most recent messages.
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/<you>/omarchy-ntfy.git
+omarchy plugin add https://github.com/ctaloi/omarchy-ntfy.git
 omarchy plugin enable ntfy
 cp ntfy.example.json ~/.config/omarchy/ntfy.json   # then edit topics
 ```
