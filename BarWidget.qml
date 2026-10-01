@@ -15,6 +15,13 @@ BarWidget {
 
   function close() { popupOpen = false }
 
+  function send() {
+    var text = sendField.text.trim()
+    if (!text || !ntfy) return
+    ntfy.publish(topicPicker.value, text)
+    sendField.text = ""
+  }
+
   function relativeTime(epoch) {
     var s = Math.max(0, Math.floor(Date.now() / 1000) - epoch)
     if (s < 60) return "now"
@@ -46,12 +53,13 @@ BarWidget {
   // Opening the popup counts as reading what's in it.
   onPopupOpenChanged: if (!popupOpen && ntfy) ntfy.markAllRead()
 
-  PopupCard {
+  KeyboardPanel {
     id: popup
     anchorItem: root
     bar: root.bar
     owner: root
     open: root.popupOpen
+    focusTarget: sendField
     contentWidth: popup.fittedContentWidth(Style.space(360))
     contentHeight: popup.fittedContentHeight(column.implicitHeight, Style.space(480))
 
@@ -93,6 +101,45 @@ BarWidget {
         font.pixelSize: Style.font.caption
         elide: Text.ElideRight
         width: parent.width
+      }
+
+      Dropdown {
+        id: topicPicker
+        visible: root.ntfy && root.ntfy.topics.length > 1
+        width: parent.width
+        showLabel: false
+        options: root.ntfy ? root.ntfy.topics : []
+        value: root.ntfy && root.ntfy.topics.length > 0 ? root.ntfy.topics[0] : ""
+        foreground: root.bar.foreground
+        fontFamily: root.bar.fontFamily
+      }
+
+      Row {
+        visible: root.ntfy && root.ntfy.configured
+        width: parent.width
+        spacing: Style.space(6)
+
+        TextField {
+          id: sendField
+          width: parent.width - sendButton.width - Style.space(6)
+          placeholderText: "Send to " + (topicPicker.value || "topic") + "…"
+          foreground: root.bar.foreground
+          font.family: root.bar.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          onAccepted: root.send()
+          Keys.onEscapePressed: root.popupOpen = false
+        }
+
+        Button {
+          id: sendButton
+          iconText: "󰒊"
+          tooltipText: "Send"
+          foreground: root.bar.foreground
+          enabled: sendField.text.trim() !== ""
+          opacity: enabled ? 1.0 : 0.4
+          anchors.verticalCenter: parent.verticalCenter
+          onClicked: root.send()
+        }
       }
 
       PanelSeparator { foreground: root.bar.foreground }
@@ -151,7 +198,7 @@ BarWidget {
               Text {
                 id: meta
                 textFormat: Text.PlainText
-                text: (row.modelData.title ? row.modelData.topic + " · " : "") + root.relativeTime(row.modelData.time)
+                text: (row.modelData.sent ? "sent · " : "") + (row.modelData.title ? row.modelData.topic + " · " : "") + root.relativeTime(row.modelData.time)
                 color: Qt.darker(root.bar.foreground, 1.6)
                 font.family: root.bar.fontFamily
                 font.pixelSize: Style.font.caption

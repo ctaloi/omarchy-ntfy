@@ -32,6 +32,7 @@ Item {
   property int backoffMs: 1000
   property bool stateLoaded: false
   property var seen: ({})
+  property var pendingSent: ({})
 
   readonly property var tagEmoji: ({
     "warning": "⚠️", "rotating_light": "🚨", "white_check_mark": "✅",
@@ -101,6 +102,11 @@ Item {
       return
     }
     if (evt.event !== "message" || seen[evt.id]) return
+    if (pendingSent[evt.topic + "\n" + evt.message]) {
+      lastId = evt.id
+      recordSent(evt)
+      return
+    }
 
     seen[evt.id] = true
     lastId = evt.id
@@ -144,6 +150,31 @@ Item {
   function clearMessages() {
     messages = []
     unreadCount = 0
+    saveState()
+  }
+
+  // ntfy echoes our own publish back on the stream. Record it from the
+  // publish response (marked read, no popup) so the echo is a no-op.
+  function publish(topic, text) {
+    if (!topic || !text || publisher.running) return
+    var base = String(server || "https://ntfy.sh").replace(/\/+$/, "")
+    publisher.command = ["curl", "-sS", "--fail", "-d", text, base + "/" + encodeURIComponent(topic)]
+    pendingSent[topic + "\n" + text] = true
+    publisher.running = true
+  }
+
+  function recordSent(line) {
+    var evt
+    try { evt = typeof line === "string" ? JSON.parse(line) : line } catch (e) { return }
+    if (!evt || !evt.id || seen[evt.id]) return
+    delete pendingSent[evt.topic + "\n" + evt.message]
+    seen[evt.id] = true
+    var msg = {
+      id: evt.id, time: Number(evt.time) || Math.floor(Date.now() / 1000),
+      topic: evt.topic || "", title: "", message: evt.message || "",
+      priority: 3, tags: [], emoji: "", click: "", read: true, sent: true
+    }
+    messages = [msg].concat(messages).slice(0, maxMessages)
     saveState()
   }
 
@@ -205,6 +236,28 @@ Item {
       root.connected = false
       // Ignore exits from a stream we deliberately replaced.
       if (root.configured && !stream.running && !retryTimer.running) root.reconnect(false)
+    }
+  }
+
+  // omarchy-shell ntfy send <topic> <message> | markRead | clear | status
+  IpcHandler {
+    target: "ntfy"
+
+    function send(topic: string, message: string): void { root.publish(topic, message) }
+    function markRead(): void { root.markAllRead() }
+    function clear(): void { root.clearMessages() }
+    function status(): string { return root.status + " (" + root.unreadCount + " unread)" }
+  }
+
+  Process {
+    id: publisher
+    stdout: SplitParser {
+      onRead: function(line) { root.recordSent(line) }
+    }
+    stderr: SplitParser {
+      onRead: function(line) {
+        Quickshell.execDetached(["notify-send", "-a", "ntfy", "-u", "normal", "ntfy send failed", String(line).trim()])
+      }
     }
   }
 
